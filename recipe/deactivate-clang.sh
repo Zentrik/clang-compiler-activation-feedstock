@@ -85,8 +85,16 @@ function deactivate_clang() {
 # When people are using conda-build, assume that adding rpath during build, and pointing at
 #    the host env's includes and libs is helpful default behavior
 if [ "${CONDA_BUILD:-0}" = "1" ]; then
-  CFLAGS_USED="@CFLAGS@ -isystem ${PREFIX}/include -fdebug-prefix-map=${SRC_DIR}=/usr/local/src/conda/${PKG_NAME}-${PKG_VERSION} -fdebug-prefix-map=${PREFIX}=/usr/local/src/conda-prefix"
-  DEBUG_CFLAGS_USED="@CFLAGS@ @DEBUG_CFLAGS@ -isystem ${PREFIX}/include -fdebug-prefix-map=${SRC_DIR}=/usr/local/src/conda/${PKG_NAME}-${PKG_VERSION} -fdebug-prefix-map=${PREFIX}=/usr/local/src/conda-prefix"
+  # -ffile-prefix-map rewrites __FILE__ as well as debug info (-fdebug-prefix-map only did
+  # debug info). A map is only added when its directory is set, since an empty old prefix
+  # matches every path, and $BUILD_PREFIX is skipped when it is $PREFIX (merged envs).
+  _CONDA_PREFIX_MAP="${SRC_DIR:+-ffile-prefix-map=${SRC_DIR}=/usr/local/src/conda/${PKG_NAME}-${PKG_VERSION} }${PREFIX:+-ffile-prefix-map=${PREFIX}=/usr/local/src/conda-prefix}"
+  if [ -n "${BUILD_PREFIX:-}" ] && [ "${BUILD_PREFIX}" != "${PREFIX:-}" ]; then
+    _CONDA_PREFIX_MAP="-ffile-prefix-map=${BUILD_PREFIX}=/usr/local/src/conda-build-prefix ${_CONDA_PREFIX_MAP}"
+  fi
+  CFLAGS_USED="@CFLAGS@ -isystem ${PREFIX}/include ${_CONDA_PREFIX_MAP}"
+  DEBUG_CFLAGS_USED="@CFLAGS@ @DEBUG_CFLAGS@ -isystem ${PREFIX}/include ${_CONDA_PREFIX_MAP}"
+  unset _CONDA_PREFIX_MAP
   LDFLAGS_USED="@LDFLAGS@ -Wl,-rpath,${PREFIX}/lib -L${PREFIX}/lib"
   LDFLAGS_LD_USED="@LDFLAGS_LD@ -rpath ${PREFIX}/lib -L${PREFIX}/lib"
   CPPFLAGS_USED="@CPPFLAGS@ -isystem ${PREFIX}/include"
